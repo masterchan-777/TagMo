@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+      xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/search"
+        android:icon="@drawable/ic_search_white_24dp"
+        android:title="Search"
+        app:actionViewClass="android.support.v7.widget.SearchView"
+        app:showAsAction="collapseActionView|always"/>
+    <item
+        android:id="@+id/filter"
+        android:icon="@drawable/ic_filter_list_white_24dp"
+        android:title="Filter"
+        app:showAsAction="ifRoom">
+        <menu>
+            <item
+                android:id="@+id/filter_game_series"
+                android:title="Game Series">
+                <menu>
+                    <group
+                        android:id="@+id/filter_game_series_group"
+                        android:checkableBehavior="single"/>
+                </menu>
+            </item>
+            <item
+                android:id="@+id/filter_character"
+                android:title="Character">
+                <menu>
+                    <group
+                        android:id="@+id/filter_character_group"
+                        android:checkableBehavior="single"/>
+                </menu>
+            </item>
+            <item
+                android:id="@+id/filter_amiibo_series"
+                android:title="Amiibo Series">
+                <menu>
+                    <group
+                        android:id="@+id/filter_amiibo_series_group"
+                        android:checkableBehavior="single"/>
+                </menu>
+            </item>
+            <item
+                android:id="@+id/filter_amiibo_type"
+                android:title="Amiibo Type">
+                <menu>
+                    <group
+                        android:id="@+id/filter_amiibo_type_group"
+                        android:checkableBehavior="single"/>
+                </menu>
+            </item>
+        </menu>
+    </item>
+    <item
+        android:id="@+id/sort"
+        android:icon="@drawable/ic_sort_white_24dp"
+        android:title="Sort"
+        app:showAsAction="ifRoom">
+        <menu>
+            <group android:checkableBehavior="single">
+                <item
+                    android:id="@+id/sort_id"
+                    android:title="ID"/>
+                <item
+                    android:id="@+id/sort_name"
+                    android:title="Name"/>
+                <item
+                    android:id="@+id/sort_game_series"
+                    android:title="Game Series"/>
+                <item
+                    android:id="@+id/sort_character"
+                    android:title="Character"/>
+                <item
+                    android:id="@+id/sort_amiibo_series"
+                    android:title="Amiibo Series"/>
+                <item
+                    android:id="@+id/sort_amiibo_type"
+                    android:title="Amiibo Type"/>
+                <item
+                    android:id="@+id/sort_file_path"
+                    android:title="File Path"/>
+            </group>
+        </menu>
+    </item>
+    <item
+        android:id="@+id/view"
+        android:icon="@drawable/ic_view_array_white_24dp"
+        android:title="Change View"
+        app:showAsAction="ifRoom">
+        <menu>
+            <group android:checkableBehavior="single">
+                <item
+                    android:id="@+id/view_simple"
+                    android:title="Simple"/>
+                <item
+                    android:id="@+id/view_compact"
+                    android:title="Compact"/>
+                <item
+                    android:id="@+id/view_large"
+                    android:title="Large"/>
+            </group>
+        </menu>
+    </item>
+    <item
+        android:id="@+id/recursive_files"
+        android:title="Find Files Recursively"
+        app:showAsAction="ifRoom"
+        android:checkable="true"/>
+    <item
+        android:id="@+id/refresh"
+        android:icon="@drawable/ic_refresh_white_24dp"
+        android:title="Refresh"
+        app:showAsAction="ifRoom"/>
+</menu>

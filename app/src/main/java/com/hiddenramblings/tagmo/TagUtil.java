@@ -1,10 +1,15 @@
 package com.hiddenramblings.tagmo;
 
+import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 public class TagUtil {
     public static final int TAG_FILE_SIZE = 532;
     public static final int PAGE_SIZE = 4;
+    public static final int AMIIBO_ID_OFFSET = 0x54;
+    public static final int APP_ID_OFFSET = 0xB6;
+    public static final int APP_ID_LENGTH = 4;
 
     public static byte[] keygen(byte[] uuid) {
         //from AmiiManage (GPL)
@@ -43,18 +48,23 @@ public class TagUtil {
         return key;
     }
 
-    /**
-     * Returns Character id bytes from a tagdata in TagFormat.
-     */
-    public static byte[] charIdDataFromTag(byte[] data) throws Exception {
-        if (data.length < 0x5C)
+    public static long amiiboIdFromTag(byte[] data) throws Exception {
+        if (data.length < TAG_FILE_SIZE)
             throw new Exception("Invalid tag data");
-        byte[] id = new byte[4*2];
-        System.arraycopy(data, 0x54, id, 0, id.length);
-        return id;
+
+        byte[] amiiboId = new byte[4 * 2];
+        System.arraycopy(data, AMIIBO_ID_OFFSET, amiiboId, 0, amiiboId.length);
+        return ByteBuffer.wrap(amiiboId).getLong();
     }
 
-    public static byte[][] splitPages(byte[] data) { //assume correct sizes
+    public static String amiiboIdToHex(long amiiboId) {
+        return String.format("%016X", amiiboId);
+    }
+
+    public static byte[][] splitPages(byte[] data) throws Exception {
+        if (data.length < TAG_FILE_SIZE)
+            throw new Exception("Invalid tag data");
+
         byte[][] pages = new byte[data.length / TagUtil.PAGE_SIZE][];
         for (int i = 0, j = 0; i < data.length; i += TagUtil.PAGE_SIZE, j++) {
             pages[j] = Arrays.copyOfRange(data, i, i + TagUtil.PAGE_SIZE);
@@ -91,7 +101,7 @@ public class TagUtil {
         AmiiTool tool = new AmiiTool();
         if (tool.setKeysFixed(keyManager.fixedKey, keyManager.fixedKey.length) == 0)
             throw new Exception("Failed to initialise amiitool");
-        if (tool.setKeysUnfixed(keyManager.unfixedKey, keyManager.unfixedKey.length)== 0)
+        if (tool.setKeysUnfixed(keyManager.unfixedKey, keyManager.unfixedKey.length) == 0)
             throw new Exception("Failed to initialise amiitool");
         byte[] decrypted = new byte[TagUtil.TAG_FILE_SIZE];
         if (tool.unpack(tagData, tagData.length, decrypted, decrypted.length) == 0)
@@ -107,7 +117,7 @@ public class TagUtil {
         AmiiTool tool = new AmiiTool();
         if (tool.setKeysFixed(keyManager.fixedKey, keyManager.fixedKey.length) == 0)
             throw new Exception("Failed to initialise amiitool");
-        if (tool.setKeysUnfixed(keyManager.unfixedKey, keyManager.unfixedKey.length)== 0)
+        if (tool.setKeysUnfixed(keyManager.unfixedKey, keyManager.unfixedKey.length) == 0)
             throw new Exception("Failed to initialise amiitool");
         byte[] encrypted = new byte[TagUtil.TAG_FILE_SIZE];
         if (tool.pack(tagData, tagData.length, encrypted, encrypted.length) == 0)
@@ -136,5 +146,16 @@ public class TagUtil {
         return result;
     }
 
+    public static byte[] readTag(InputStream inputStream) throws Exception {
+        byte[] data = new byte[TAG_FILE_SIZE];
+        try {
+            int len = inputStream.read(data);
+            if (len != TAG_FILE_SIZE)
+                throw new Exception("Invalid file size. was expecting " + TAG_FILE_SIZE);
 
+            return data;
+        } finally {
+            inputStream.close();
+        }
+    }
 }

@@ -6,105 +6,162 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
-import android.graphics.Color;
+import android.graphics.Bitmap;
+import android.graphics.drawable.Drawable;
 import android.media.MediaScannerConnection;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Uri;
 import android.nfc.NfcAdapter;
+import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
+import android.provider.Settings;
+import android.support.annotation.Nullable;
+import android.support.design.widget.Snackbar;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Base64;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.view.View;
+
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.request.RequestOptions;
+import com.bumptech.glide.request.target.SimpleTarget;
+import com.bumptech.glide.request.transition.Transition;
+import com.hiddenramblings.tagmo.amiibo.Amiibo;
+import com.hiddenramblings.tagmo.amiibo.AmiiboManager;
+
+import com.hiddenramblings.tagmo.ptag.PTagKeyManager;
+
 
 import org.androidannotations.annotations.AfterViews;
 import org.androidannotations.annotations.Background;
 import org.androidannotations.annotations.Click;
 import org.androidannotations.annotations.EActivity;
+import org.androidannotations.annotations.InstanceState;
+import org.androidannotations.annotations.OnActivityResult;
 import org.androidannotations.annotations.OptionsItem;
 import org.androidannotations.annotations.OptionsMenu;
+import org.androidannotations.annotations.OptionsMenuItem;
 import org.androidannotations.annotations.UiThread;
 import org.androidannotations.annotations.ViewById;
+import org.androidannotations.annotations.sharedpreferences.Pref;
+import org.androidannotations.api.BackgroundExecutor;
+import org.json.JSONException;
 
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.InputStream;
+import java.io.IOException;
+import java.text.ParseException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 
-
 @EActivity(R.layout.activity_main)
 @OptionsMenu({R.menu.main_menu})
-public class MainActivity extends AppCompatActivity /* implements TagCreateDialog.TagCreateListener */ {
+public class MainActivity extends AppCompatActivity {
     private static final String TAG = "MainActivity";
 
-    private static final String DATA_DIR = "tagmo";
+    public static final String BACKGROUND_AMIIBO_MANAGER = "amiibo_manager";
 
     private static final int FILE_LOAD_TAG = 0x100;
-    private static final int FILE_LOAD_KEYS = 0x101;
     private static final int NFC_ACTIVITY = 0x102;
     private static final int EDIT_TAG = 0x103;
+    private static final int SCAN_QR_CODE = 0x104;
 
-    @ViewById(R.id.txtLockedKey)
-    TextView txtLockedKey;
-    @ViewById(R.id.txtUnfixedKey)
-    TextView txtUnfixedKey;
-    @ViewById(R.id.txtNFC)
-    TextView txtNFC;
-    @ViewById(R.id.txtTagId)
+    public static final int VIEW_TYPE_SIMPLE = 0;
+    public static final int VIEW_TYPE_COMPACT = 1;
+    public static final int VIEW_TYPE_LARGE = 2;
+
     TextView txtTagId;
+    TextView txtName;
+    TextView txtGameSeries;
+    TextView txtCharacter;
+    TextView txtAmiiboType;
+    TextView txtAmiiboSeries;
+    ImageView imageAmiibo;
 
+    @OptionsMenuItem(R.id.view_simple)
+    MenuItem menuViewSimple;
+    @OptionsMenuItem(R.id.view_compact)
+    MenuItem menuViewCompact;
+    @OptionsMenuItem(R.id.view_large)
+    MenuItem menuViewLarge;
+
+    @ViewById(R.id.btnScanTag)
+    Button btnScanTag;
     @ViewById(R.id.btnSaveTag)
     Button btnSaveTag;
     @ViewById(R.id.btnLoadTag)
     Button btnLoadTag;
     @ViewById(R.id.btnWriteTagAuto)
     Button btnWriteTagAuto;
-    @ViewById(R.id.btnWriteTagRaw)
-    Button btnWriteTagRaw;
     @ViewById(R.id.btnRestoreTag)
     Button btnRestoreTag;
+    @ViewById(R.id.btnScanQRCode)
+    Button btnScanQRCode;
+    @ViewById(R.id.btnShowQRCode)
+    Button btnShowQRCode;
     @ViewById(R.id.btnEditDataSSB)
     Button btnEditDataSSB;
+    @ViewById(R.id.btnEditDataTP)
+    Button btnEditDataTP;
     @ViewById(R.id.btnViewHex)
     Button btnViewHex;
+    @ViewById(R.id.coordinator)
+    View snackBarContainer;
 
     @ViewById(R.id.cbAutoSaveOnScan)
     CheckBox cbAutoSaveOnScan;
     @ViewById(R.id.cbNoIDValidate)
     CheckBox cbNoIDValidate;
 
+    @InstanceState
     byte[] currentTagData;
     KeyManager keyManager;
     NfcAdapter nfcAdapter;
 
-    boolean keyWarningShown;
+    AmiiboManager amiiboManager = null;
+
+    @Pref
+    Preferences_ prefs;
+
+    ArrayList<Snackbar> snackbarQueue = new ArrayList<>();
+    Snackbar keysNotFoundSnackbar;
+    Snackbar nfcNotSupportedSnackbar;
+    Snackbar nfcNotEnabledSnackbar;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         this.verifyStoragePermissions();
     }
 
     @AfterViews
     protected void afterViews() {
         nfcAdapter = NfcAdapter.getDefaultAdapter(this);
-        keyManager = new KeyManager(this);
-
-        updateStatus();
+        setAmiiboView();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+
         startNfcMonitor();
-        updateStatus();
+        keyManager = new KeyManager(this);
+        this.loadAmiiboManager();
+        this.loadPTagKeyManager();
     }
 
     @Override
@@ -113,12 +170,63 @@ public class MainActivity extends AppCompatActivity /* implements TagCreateDialo
         super.onPause();
     }
 
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        boolean result = super.onCreateOptionsMenu(menu);
+
+        setView(getView());
+
+        return result;
+    }
+
+    @Background
+    void loadPTagKeyManager() {
+        if (!prefs.enablePowerTagSupport().get()) {
+            Log.d(TAG, "PowerTag support not enabled.");
+            return;
+        }
+        try {
+            Log.d(TAG, "Loading PowerTag keyset.");
+            PTagKeyManager.load(this);
+        } catch (Exception e) {
+            e.printStackTrace();
+            showToast("Failed to load PowerTag keys");
+        }
+    }
+
+    void loadAmiiboManager() {
+        BackgroundExecutor.cancelAll(BACKGROUND_AMIIBO_MANAGER, true);
+        loadAmiiboManagerTask();
+    }
+
+    @Background(id=BACKGROUND_AMIIBO_MANAGER)
+    void loadAmiiboManagerTask() {
+        AmiiboManager amiiboManager = null;
+        try {
+            amiiboManager = Util.loadAmiiboManager(this);
+        } catch (IOException | JSONException | ParseException e) {
+            e.printStackTrace();
+            showToast("Unable to parse amiibo info");
+        }
+
+        if (Thread.currentThread().isInterrupted())
+            return;
+        setAmiiboManager(amiiboManager);
+    }
+
+    @UiThread
+    void setAmiiboManager(AmiiboManager amiiboManager) {
+        this.amiiboManager = amiiboManager;
+        this.updateStatus();
+    }
+
     private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             final String action = intent.getAction();
 
             if (action.equals(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED)) {
+                Log.d(TAG, "ACTION_ADAPTER_STATE_CHANGED");
                 updateStatus();
             }
         }
@@ -127,6 +235,7 @@ public class MainActivity extends AppCompatActivity /* implements TagCreateDialo
     void startNfcMonitor() {
         if (nfcAdapter == null)
             return;
+
         IntentFilter filter = new IntentFilter(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED);
         this.registerReceiver(mReceiver, filter);
     }
@@ -137,103 +246,380 @@ public class MainActivity extends AppCompatActivity /* implements TagCreateDialo
         this.unregisterReceiver(mReceiver);
     }
 
+    Snackbar.Callback snackbarCallback = new Snackbar.Callback() {
+        @Override
+        public void onDismissed(Snackbar snackbar, int event) {
+            super.onDismissed(snackbar, event);
+
+            switch (event) {
+                case Snackbar.Callback.DISMISS_EVENT_ACTION:
+                case Snackbar.Callback.DISMISS_EVENT_TIMEOUT:
+                case Snackbar.Callback.DISMISS_EVENT_SWIPE:
+                case Snackbar.Callback.DISMISS_EVENT_MANUAL:
+                    snackbarQueue.remove(snackbar);
+                    if (!snackbarQueue.isEmpty()) {
+                        displaySnackbar(snackbarQueue);
+                    }
+                    break;
+            }
+        }
+    };
+
+    public void displaySnackbar(ArrayList<Snackbar> queue) {
+        if (queue.isEmpty())
+            return;
+
+        queue.get(0)
+            .removeCallback(snackbarCallback)
+            .addCallback(snackbarCallback)
+            .show();
+    }
+
+    public int getView() {
+        return this.prefs.mainAmiiboView().get();
+    }
+
+    public void setView(int view) {
+        this.prefs.mainAmiiboView().put(view);
+        if (view == VIEW_TYPE_SIMPLE) {
+            menuViewSimple.setChecked(true);
+        } else if (view == VIEW_TYPE_COMPACT) {
+            menuViewCompact.setChecked(true);
+        } else if (view == VIEW_TYPE_LARGE) {
+            menuViewLarge.setChecked(true);
+        }
+    }
+
     @UiThread
     void updateStatus() {
         boolean hasNfc = (nfcAdapter != null);
-        boolean nfcEnabled = hasNfc && nfcAdapter.isEnabled();
+        boolean nfcEnabled = !hasNfc || nfcAdapter.isEnabled();
         boolean hasFixed = this.keyManager.hasFixedKey();
         boolean hasUnfixed = this.keyManager.hasUnFixedKey();
         boolean hasKeys = hasFixed && hasUnfixed;
         boolean hasTag = currentTagData != null;
 
+        if (!hasKeys) {
+            if (keysNotFoundSnackbar == null) {
+                keysNotFoundSnackbar = Snackbar
+                    .make(snackBarContainer, R.string.keys_missing_warning, Snackbar.LENGTH_INDEFINITE)
+                    .setAction(R.string.open_settings_action, new View.OnClickListener() {
+                        @Override
+                        public void onClick(View view) {
+                            openSettings();
+                        }
+                    })
+                    .addCallback(new Snackbar.Callback() {
+                        @Override
+                        public void onDismissed(Snackbar snackbar, int event) {
+                            super.onDismissed(snackbar, event);
+
+                            if (keysNotFoundSnackbar == snackbar) {
+                                keysNotFoundSnackbar = null;
+                            }
+                        }
+                    });
+            }
+            if (!snackbarQueue.contains(keysNotFoundSnackbar)) {
+                snackbarQueue.add(keysNotFoundSnackbar);
+            }
+        } else if (snackbarQueue.indexOf(keysNotFoundSnackbar) == 0) {
+            keysNotFoundSnackbar.dismiss();
+        } else {
+            snackbarQueue.remove(keysNotFoundSnackbar);
+        }
         if (!hasNfc) {
-            txtNFC.setTextColor(Color.RED);
-            txtNFC.setText("NFC not supported!");
-        } else if (!nfcEnabled) {
-            txtNFC.setTextColor(Color.RED);
-            txtNFC.setText("NFC not enabled!");
-        } else {
-            txtNFC.setTextColor(Color.rgb(0x00, 0xAf, 0x00));
-            txtNFC.setText("NFC enabled!");
-        }
+            if (nfcNotSupportedSnackbar == null) {
+                nfcNotSupportedSnackbar = Snackbar
+                    .make(snackBarContainer, R.string.nfc_unsupported, Snackbar.LENGTH_INDEFINITE)
+                    .addCallback(new Snackbar.Callback() {
+                        @Override
+                        public void onDismissed(Snackbar snackbar, int event) {
+                            super.onDismissed(snackbar, event);
 
-        if (!hasFixed) {
-            txtLockedKey.setTextColor(Color.RED);
-            txtLockedKey.setText("No Locked key!");
+                            if (nfcNotSupportedSnackbar == snackbar) {
+                                nfcNotSupportedSnackbar = null;
+                            }
+                        }
+                    });
+            }
+            if (!snackbarQueue.contains(nfcNotSupportedSnackbar)) {
+                snackbarQueue.add(nfcNotSupportedSnackbar);
+            }
+        } else if (snackbarQueue.indexOf(nfcNotSupportedSnackbar) == 0) {
+            nfcNotSupportedSnackbar.dismiss();
         } else {
-            txtLockedKey.setTextColor(Color.rgb(0x00, 0xAf, 0x00));
-            txtLockedKey.setText("Locked key OK.");
+            snackbarQueue.remove(nfcNotSupportedSnackbar);
         }
+        if (!nfcEnabled) {
+            if (nfcNotEnabledSnackbar == null) {
+                nfcNotEnabledSnackbar = Snackbar
+                    .make(snackBarContainer, R.string.nfc_disabled, Snackbar.LENGTH_INDEFINITE)
+                    .setAction(R.string.nfc_enable_action, new View.OnClickListener() {
+                        @Override
+                        public void onClick(View view) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                                Intent intent = new Intent(Settings.ACTION_NFC_SETTINGS);
+                                startActivity(intent);
+                            } else {
+                                Intent intent = new Intent(Settings.ACTION_WIRELESS_SETTINGS);
+                                startActivity(intent);
+                            }
+                        }
+                    })
+                    .addCallback(new Snackbar.Callback() {
+                        @Override
+                        public void onDismissed(Snackbar snackbar, int event) {
+                            super.onDismissed(snackbar, event);
 
-        if (!hasUnfixed) {
-            txtUnfixedKey.setTextColor(Color.RED);
-            txtUnfixedKey.setText("No Unfixed key!");
+                            if (nfcNotEnabledSnackbar == snackbar) {
+                                nfcNotEnabledSnackbar = null;
+                            }
+                        }
+                    });
+            }
+            if (!snackbarQueue.contains(nfcNotEnabledSnackbar)) {
+                snackbarQueue.add(nfcNotEnabledSnackbar);
+            }
+        } else if (snackbarQueue.indexOf(nfcNotEnabledSnackbar) == 0) {
+            nfcNotEnabledSnackbar.dismiss();
         } else {
-            txtUnfixedKey.setTextColor(Color.rgb(0x00, 0xAf, 0x00));
-            txtUnfixedKey.setText("Unfixed key OK.");
+            snackbarQueue.remove(nfcNotEnabledSnackbar);
         }
+        displaySnackbar(snackbarQueue);
 
+        btnScanTag.setEnabled(nfcEnabled);
         btnWriteTagAuto.setEnabled(nfcEnabled && hasKeys && hasTag);
-        btnWriteTagRaw.setEnabled(nfcEnabled && hasTag);
         btnRestoreTag.setEnabled(nfcEnabled && hasTag);
-        btnSaveTag.setEnabled(nfcEnabled && hasTag);
+        btnSaveTag.setEnabled(hasTag);
+        btnShowQRCode.setEnabled(hasTag);
         btnEditDataSSB.setEnabled(hasKeys && hasTag);
+        btnEditDataTP.setEnabled(hasKeys && hasTag);
         btnViewHex.setEnabled(hasKeys && hasTag);
 
-        if (!hasKeys && !keyWarningShown) {
-            LogError("Not all keys loaded. Load keys using the menu.");
-            keyWarningShown = true;
+        int ssbVisibility = View.GONE;
+        int tpVisibility = View.GONE;
+
+        if (currentTagData != null) {
+            try {
+                long amiiboId = TagUtil.amiiboIdFromTag(currentTagData);
+                if (EditorTP.canEditAmiibo(amiiboId)) {
+                    tpVisibility = View.VISIBLE;
+                }
+                if (EditorSSB.canEditAmiibo(amiiboId)) {
+                    ssbVisibility = View.VISIBLE;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
 
-        try {
-            if (this.currentTagData != null) {
-                byte[] charIdData = TagUtil.charIdDataFromTag(this.currentTagData);
-                String charId = AmiiboDictionary.getDisplayName(charIdData);
-                String uid = Util.bytesToHex(TagUtil.uidFromPages(this.currentTagData));
-                txtTagId.setText("TagId: " + charId + " / " + uid);
-                onTagLoaded(charIdData);
-            } else {
-                txtTagId.setText("TagId: <No tag loaded>");
-                onTagLoaded(null);
+        updateAmiiboView();
+
+        btnEditDataSSB.setVisibility(ssbVisibility);
+        btnEditDataTP.setVisibility(tpVisibility);
+    }
+
+    void setAmiiboView() {
+        ViewGroup amiiboInfoView = this.findViewById(R.id.amiiboInfoView);
+        Glide.with(this).clear(amiiboImageTarget);
+        amiiboInfoView.removeAllViews();
+
+        View amiiboView;
+        switch (getView()) {
+            case VIEW_TYPE_COMPACT:
+                amiiboView = this.getLayoutInflater().inflate(R.layout.amiibo_compact_card, amiiboInfoView, false);
+                break;
+            case VIEW_TYPE_LARGE:
+                amiiboView = this.getLayoutInflater().inflate(R.layout.amiibo_large_card, amiiboInfoView, false);
+                break;
+            case VIEW_TYPE_SIMPLE:
+            default:
+                amiiboView = this.getLayoutInflater().inflate(R.layout.amiibo_simple_card, amiiboInfoView, false);
+                break;
+        }
+
+        amiiboInfoView.addView(amiiboView);
+        txtTagId = amiiboView.findViewById(R.id.txtTagId);
+        txtName = amiiboView.findViewById(R.id.txtName);
+        txtGameSeries = amiiboView.findViewById(R.id.txtGameSeries);
+        txtCharacter = amiiboView.findViewById(R.id.txtCharacter);
+        txtAmiiboType = amiiboView.findViewById(R.id.txtAmiiboType);
+        txtAmiiboSeries = amiiboView.findViewById(R.id.txtAmiiboSeries);
+        imageAmiibo = amiiboView.findViewById(R.id.imageAmiibo);
+        if (imageAmiibo != null) {
+            imageAmiibo.setOnClickListener(this.onAmiiboImageClick);
+        }
+
+        updateAmiiboView();
+    }
+
+    View.OnClickListener onAmiiboImageClick = new View.OnClickListener() {
+        @Override
+        public void onClick(View view) {
+            long amiiboId;
+            try {
+                amiiboId = TagUtil.amiiboIdFromTag(currentTagData);
+            } catch (Exception e) {
+                e.printStackTrace();
+                return;
             }
-        } catch (Exception e) {
-            LogError("Error parsing tag id", e);
-            txtTagId.setText("TagID: <Error>");
-            onTagLoaded(null);
+
+            Bundle bundle = new Bundle();
+            bundle.putLong(ImageActivity.INTENT_EXTRA_AMIIBO_ID, amiiboId);
+
+            Intent intent = new Intent(MainActivity.this, ImageActivity_.class);
+            intent.putExtras(bundle);
+
+            startActivity(intent);
+        }
+    };
+
+    SimpleTarget<Bitmap> amiiboImageTarget = new SimpleTarget<Bitmap>() {
+        @Override
+        public void onLoadStarted(@Nullable Drawable placeholder) {
+            imageAmiibo.setVisibility(View.GONE);
+        }
+
+        @Override
+        public void onLoadFailed(@Nullable Drawable errorDrawable) {
+            imageAmiibo.setVisibility(View.GONE);
+        }
+
+        @Override
+        public void onResourceReady(Bitmap resource, Transition transition) {
+            imageAmiibo.setImageBitmap(resource);
+            imageAmiibo.setVisibility(View.VISIBLE);
+        }
+    };
+
+
+    public void updateAmiiboView() {
+        String tagInfo = null;
+        String amiiboHexId = "";
+        String amiiboName = "";
+        String amiiboSeries = "";
+        String amiiboType = "";
+        String gameSeries = "";
+        String character = "";
+        final String amiiboImageUrl;
+
+        if (this.currentTagData == null) {
+            tagInfo = "<No Tag Loaded>";
+            amiiboImageUrl = null;
+        } else {
+            long amiiboId;
+            try {
+                amiiboId = TagUtil.amiiboIdFromTag(this.currentTagData);
+            } catch (Exception e) {
+                e.printStackTrace();
+                amiiboId = -1;
+            }
+            if (amiiboId == -1) {
+                tagInfo = "<Error Reading Tag>";
+                amiiboImageUrl = null;
+            } else if (amiiboId == 0) {
+                tagInfo = "<Blank Tag>";
+                amiiboImageUrl = null;
+            } else {
+                Amiibo amiibo = null;
+                if (this.amiiboManager != null) {
+                    amiibo = amiiboManager.amiibos.get(amiiboId);
+                    if (amiibo == null)
+                        amiibo = new Amiibo(amiiboManager, amiiboId, null, null);
+                }
+                if (amiibo != null) {
+                    amiiboHexId = TagUtil.amiiboIdToHex(amiibo.id);
+                    amiiboImageUrl = amiibo.getImageUrl();
+                    if (amiibo.name != null)
+                        amiiboName = amiibo.name;
+                    if (amiibo.getAmiiboSeries() != null)
+                        amiiboSeries = amiibo.getAmiiboSeries().name;
+                    if (amiibo.getAmiiboType() != null)
+                        amiiboType = amiibo.getAmiiboType().name;
+                    if (amiibo.getGameSeries() != null)
+                        gameSeries = amiibo.getGameSeries().name;
+                    if (amiibo.getCharacter() != null)
+                        character = amiibo.getCharacter().name;
+                } else {
+                    tagInfo = "ID: " + TagUtil.amiiboIdToHex(amiiboId);
+                    amiiboImageUrl = Amiibo.getImageUrl(amiiboId);
+                }
+            }
+        }
+
+        if (tagInfo == null) {
+            setAmiiboInfoText(txtName, amiiboName, false);
+        } else {
+            setAmiiboInfoText(txtName, tagInfo, false);
+        }
+        setAmiiboInfoText(txtTagId, amiiboHexId, tagInfo != null);
+        setAmiiboInfoText(txtAmiiboSeries, amiiboSeries, tagInfo != null);
+        setAmiiboInfoText(txtAmiiboType, amiiboType, tagInfo != null);
+        setAmiiboInfoText(txtGameSeries, gameSeries, tagInfo != null);
+        //setAmiiboInfoText(txtCharacter, character, tagInfo != null);
+
+        if (imageAmiibo != null) {
+            imageAmiibo.setVisibility(View.GONE);
+            Glide.with(this).clear(amiiboImageTarget);
+            if (amiiboImageUrl != null) {
+                Glide.with(this)
+                    .setDefaultRequestOptions(new RequestOptions().onlyRetrieveFromCache(onlyRetrieveFromCache()))
+                    .asBitmap()
+                    .load(amiiboImageUrl)
+                    .into(amiiboImageTarget);
+            }
         }
     }
 
-    void onTagLoaded(byte[] charIdData) {
-        //Button edit_ssb = (Button) findViewById(R.id.btnEditDataSSB);
-        Button edit_tp = (Button) findViewById(R.id.btnEditDataTP);
-
-        if (charIdData == null) {
-            //edit_ssb.setVisibility(View.INVISIBLE);
-            edit_tp.setVisibility(View.INVISIBLE);
+    void setAmiiboInfoText(TextView textView, CharSequence text, boolean hasTagInfo) {
+        if (hasTagInfo) {
+            textView.setVisibility(View.GONE);
         } else {
-            AmiiboDictionary.AmiiboIdData ad = AmiiboDictionary.parseid(charIdData);
-            int id = (ad.Brand << 16) + (ad.Variant << 8) + ad.Type;
-            switch (id) {
-                case 0x01030000: // Wolf Link; TODO: Make AmiiboDictinary IDS an enum
-                    //edit_ssb.setVisibility(View.INVISIBLE);
-                    edit_tp.setVisibility(View.VISIBLE);
-                    break;
-                default:
-                    //edit_ssb.setVisibility(View.VISIBLE);
-                    edit_tp.setVisibility(View.INVISIBLE);
-                    break;
+            textView.setVisibility(View.VISIBLE);
+            if (text.length() == 0) {
+                textView.setText("Unknown");
+                textView.setEnabled(false);
+            } else {
+                textView.setText(text);
+                textView.setEnabled(true);
             }
+        }
+    }
+
+    boolean onlyRetrieveFromCache() {
+        String imageNetworkSetting = prefs.imageNetworkSetting().get();
+        if (SettingsFragment.IMAGE_NETWORK_NEVER.equals(imageNetworkSetting)) {
+            return true;
+        } else if (SettingsFragment.IMAGE_NETWORK_WIFI.equals(imageNetworkSetting)) {
+            ConnectivityManager cm = (ConnectivityManager) this.getSystemService(Context.CONNECTIVITY_SERVICE);
+
+            NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
+            return activeNetwork == null || activeNetwork.getType() != ConnectivityManager.TYPE_WIFI;
+        } else {
+            return false;
         }
     }
 
     @Click(R.id.btnLoadTag)
     void loadTagFile() {
-        showFileChooser("Load encrypted tag file for writing", "*/*", FILE_LOAD_TAG);
+        if (prefs.enableAmiiboBrowser().get()) {
+            Intent intent = new Intent(this, BrowserActivity_.class);
+            startActivityForResult(intent, FILE_LOAD_TAG);
+        } else {
+            showFileChooser("Load encrypted tag file for writing", "*/*", FILE_LOAD_TAG);
+        }
     }
 
-    @OptionsItem(R.id.mnu_load_keys)
-    void loadKeysClicked() {
-        showFileChooser("Load key file", "*/*", FILE_LOAD_KEYS);
+    @OptionsItem(R.id.mnu_dump_logcat)
+    void dumpLogcatClicked() {
+        dumpLogCat();
+    }
+
+    @OptionsItem(R.id.settings)
+    void openSettings() {
+        Intent i = new Intent(this, SettingsActivity_.class);
+        startActivity(i);
     }
 
     @Click(R.id.btnScanTag)
@@ -243,10 +629,14 @@ public class MainActivity extends AppCompatActivity /* implements TagCreateDialo
         startActivityForResult(intent, NFC_ACTIVITY);
     }
 
-    @Click(R.id.btnWriteTagRaw)
+    @OptionsItem(R.id.mnu_write_raw)
     void writeToTagRaw() {
         if (this.currentTagData == null) {
             LogError("No tag loaded");
+            return;
+        }
+        if (!this.keyManager.hasBothKeys()) {
+            LogError("Keys not loaded");
             return;
         }
         Intent intent = new Intent(this, NfcActivity_.class);
@@ -289,6 +679,77 @@ public class MainActivity extends AppCompatActivity /* implements TagCreateDialo
         writeTagToFile(this.currentTagData);
     }
 
+    @Click(R.id.btnShowQRCode)
+    void showQRCode() {
+        if (this.currentTagData == null) {
+            LogError("No tag loaded");
+            return;
+        }
+
+        String content = Base64.encodeToString(this.currentTagData, Base64.DEFAULT);
+
+        Intent intent = new Intent("com.google.zxing.client.android.ENCODE");
+        intent.putExtra("ENCODE_TYPE", "TEXT_TYPE");
+        intent.putExtra("ENCODE_SHOW_CONTENTS", false);
+        intent.putExtra("ENCODE_DATA", content);
+        startQRActivity(intent, -1);
+    }
+
+    @Click(R.id.btnScanQRCode)
+    void scanQRCode() {
+        Intent intent = new Intent("com.google.zxing.client.android.SCAN");
+        intent.putExtra("SCAN_MODE", "QR_CODE_MODE");
+        intent.putExtra("CHARACTER_SET", "ISO-8859-1");
+        startQRActivity(intent, SCAN_QR_CODE);
+    }
+
+    void startQRActivity(Intent intent, int resultCode) {
+        if (intent.resolveActivity(getPackageManager()) != null) {
+            this.startActivityForResult(intent, resultCode);
+        } else {
+            new AlertDialog.Builder(this)
+                .setMessage("Barcode Scanner is required to use QR Codes. Would you like to install it from the Play Store?")
+                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        Uri marketUri = Uri.parse("market://details?id=com.google.zxing.client.android");
+                        Intent marketIntent = new Intent(Intent.ACTION_VIEW, marketUri);
+                        startActivity(marketIntent);
+                    }
+                })
+                .setNegativeButton("No", null)
+                .show();
+        }
+    }
+
+    void loadQRCode(String content) {
+        byte[] data;
+        try {
+            data = Base64.decode(content, Base64.DEFAULT);
+            TagUtil.validateTag(data);
+        } catch (Exception e) {
+            Log.e(TAG, "QR Code base64 decode failure", e);
+            data = null;
+        }
+        if (data == null) {
+            try {
+                data = content.getBytes("ISO-8859-1");
+                TagUtil.validateTag(data);
+            } catch (Exception e) {
+                Log.e(TAG, "QR Code legacy decode failure", e);
+                data = null;
+            }
+        }
+
+        if (data == null) {
+            showToast("Failed to decode QR Code");
+            return;
+        }
+
+        this.currentTagData = data;
+        this.updateStatus();
+    }
+
     @Click(R.id.btnEditDataSSB)
     void editSSBData() {
         if (this.currentTagData == null) {
@@ -325,49 +786,72 @@ public class MainActivity extends AppCompatActivity /* implements TagCreateDialo
         startActivity(intent);
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode != RESULT_OK)
+    @OptionsItem(R.id.view_simple)
+    void onViewSimpleClick() {
+        this.setView(VIEW_TYPE_SIMPLE);
+        this.setAmiiboView();
+    }
+
+    @OptionsItem(R.id.view_compact)
+    void onViewCompactClick() {
+        this.setView(VIEW_TYPE_COMPACT);
+        this.setAmiiboView();
+    }
+
+    @OptionsItem(R.id.view_large)
+    void onViewLargeClick() {
+        this.setView(VIEW_TYPE_LARGE);
+        this.setAmiiboView();
+    }
+
+    @OnActivityResult(EDIT_TAG)
+    void onEditTagResult(int resultCode, Intent data) {
+        if (resultCode != RESULT_OK || data == null)
             return;
 
-        Log.d(TAG, "onActivityResult");
+        if (!Actions.ACTION_EDIT_COMPLETE.equals(data.getAction()))
+            return;
 
-        String action;
-        switch (requestCode)
-        {
-            case EDIT_TAG:
-                if (data == null) return;
-                action = data.getAction();
-                if (!Actions.ACTION_EDIT_COMPLETE.equals(action))
-                    return;
-                this.currentTagData = data.getByteArrayExtra(Actions.EXTRA_TAG_DATA);
-                this.updateStatus();
-                if (this.currentTagData == null) {
-                    LogError("Tag data is empty");
-                    return;
-                }
-            case NFC_ACTIVITY:
-                if (data == null) return;
-                action = data.getAction();
-                if (!NfcActivity.ACTION_NFC_SCANNED.equals(action))
-                    return;
-                this.currentTagData = data.getByteArrayExtra(NfcActivity.EXTRA_TAG_DATA);
-                updateStatus();
-                if (this.currentTagData == null) {
-                    LogError("Tag data is empty");
-                    return;
-                }
-                if (cbAutoSaveOnScan.isChecked())
-                    writeTagToFile(this.currentTagData);
-                break;
-            case FILE_LOAD_KEYS:
-                loadKey(data.getData());
-                break;
-            case FILE_LOAD_TAG:
-                loadTagFile(data.getData());
-                break;
+        this.currentTagData = data.getByteArrayExtra(Actions.EXTRA_TAG_DATA);
+        this.updateStatus();
+
+        if (this.currentTagData == null) {
+            LogError("Tag data is empty");
         }
+    }
+
+    @OnActivityResult(NFC_ACTIVITY)
+    void onNFCResult(int resultCode, Intent data) {
+        if (resultCode != RESULT_OK || data == null)
+            return;
+
+        if (!NfcActivity.ACTION_NFC_SCANNED.equals(data.getAction()))
+            return;
+
+        this.currentTagData = data.getByteArrayExtra(NfcActivity.EXTRA_TAG_DATA);
+        updateStatus();
+
+        if (this.currentTagData == null) {
+            LogError("Tag data is empty");
+        } else if (cbAutoSaveOnScan.isChecked()) {
+            writeTagToFile(this.currentTagData);
+        }
+    }
+
+    @OnActivityResult(FILE_LOAD_TAG)
+    void onFileLoadResult(int resultCode, Intent data) {
+        if (resultCode != RESULT_OK || data == null)
+            return;
+
+        loadTagFile(data.getData());
+    }
+
+    @OnActivityResult(SCAN_QR_CODE)
+    void onScanQRCodeResult(int resultCode, Intent data) {
+        if (resultCode != RESULT_OK || data == null)
+            return;
+
+        loadQRCode(data.getStringExtra("SCAN_RESULT"));
     }
 
     private void showFileChooser(String title, String mimeType, int resultCode) {
@@ -387,8 +871,8 @@ public class MainActivity extends AppCompatActivity /* implements TagCreateDialo
     private static final String READ_EXTERNAL_STORAGE = "android.permission.READ_EXTERNAL_STORAGE";
     private static final String WRITE_EXTERNAL_STORAGE = "android.permission.WRITE_EXTERNAL_STORAGE";
     private static String[] PERMISSIONS_STORAGE = {
-            READ_EXTERNAL_STORAGE,
-            WRITE_EXTERNAL_STORAGE
+        READ_EXTERNAL_STORAGE,
+        WRITE_EXTERNAL_STORAGE
     };
 
     void verifyStoragePermissions() {
@@ -398,34 +882,15 @@ public class MainActivity extends AppCompatActivity /* implements TagCreateDialo
         }
     }
 
-
-    @Background
-    void loadKey(Uri uri) {
-        try {
-            this.keyManager.loadKey(uri);
-        } catch (Exception e) {
-            LogError("Error: " + e.getMessage());
-        }
-        updateStatus();
-    }
-
     @Background
     void loadTagFile(Uri uri) {
         try {
-            InputStream strm = getContentResolver().openInputStream(uri);
-            byte[] data = new byte[TagUtil.TAG_FILE_SIZE];
-            try {
-                int len = strm.read(data);
-                if (len != TagUtil.TAG_FILE_SIZE)
-                    throw new Exception("Invalid file size. was expecting " + TagUtil.TAG_FILE_SIZE);
-            } finally {
-                strm.close();
-            }
-            this.currentTagData = data;
+            this.currentTagData = TagUtil.readTag(getContentResolver().openInputStream(uri));
             showToast("Loaded tag file.");
         } catch (Exception e) {
             LogError("Error: " + e.getMessage());
         }
+        Log.d(TAG, "loadTagFile");
         updateStatus();
     }
 
@@ -440,18 +905,26 @@ public class MainActivity extends AppCompatActivity /* implements TagCreateDialo
         }
 
         try {
-            byte[] charIdData = TagUtil.charIdDataFromTag(this.currentTagData);
-            String charId = AmiiboDictionary.getDisplayName(charIdData).replace("/", "-"); //prevent invalid filenames
+            long amiiboId = TagUtil.amiiboIdFromTag(this.currentTagData);
+            String name = null;
+            if (this.amiiboManager != null) {
+                Amiibo amiibo = this.amiiboManager.amiibos.get(amiiboId);
+                if (amiibo != null && amiibo.name != null) {
+                    name = amiibo.name.replace("/", "-");
+                }
+            }
+            if (name == null)
+                name = TagUtil.amiiboIdToHex(amiiboId);
 
             byte[] uId = Arrays.copyOfRange(tagdata, 0, 9);
             String uIds = Util.bytesToHex(uId);
-            String fName = String.format("%1$s [%2$s] %3$ty%3$tm%3$te_%3$tH%3$tM%3$tS%4$s.bin", charId,  uIds, Calendar.getInstance(), (valid ? "" : "_corrupted_"));
+            String fileName = String.format("%1$s [%2$s] %3$ty%3$tm%3$te_%3$tH%3$tM%3$tS%4$s.bin", name, uIds, Calendar.getInstance(), (valid ? "" : "_corrupted_"));
 
-            File dir = new File(Environment.getExternalStorageDirectory(), DATA_DIR);
+            File dir = Util.getDataDir();
             if (!dir.isDirectory())
                 dir.mkdir();
 
-            File file = new File(dir.getAbsolutePath(), fName);
+            File file = new File(dir.getAbsolutePath(), fileName);
 
             Log.d(TAG, file.toString());
             FileOutputStream fos = new FileOutputStream(file);
@@ -465,6 +938,30 @@ public class MainActivity extends AppCompatActivity /* implements TagCreateDialo
             } catch (Exception e) {
                 Log.e(TAG, "Failed to refresh media scanner", e);
             }
+            LogMessage("Wrote to file " + fileName + " in tagmo directory.");
+        } catch (Exception e) {
+            LogError("Error writing to file: " + e.getMessage());
+        }
+    }
+
+    @Background
+    void dumpLogCat() {
+        try {
+            File dir = Util.getDataDir();
+            if (!dir.isDirectory())
+                dir.mkdir();
+
+            String fName = "tagmo_logcat.txt";
+
+            File file = new File(dir.getAbsolutePath(), fName);
+
+            Log.d(TAG, file.toString());
+            Util.dumpLogcat(file.getAbsolutePath());
+            try {
+                MediaScannerConnection.scanFile(this, new String[]{file.getAbsolutePath()}, null, null);
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to refresh media scanner", e);
+            }
             LogMessage("Wrote to file " + fName + " in tagmo directory.");
         } catch (Exception e) {
             LogError("Error writing to file: " + e.getMessage());
@@ -472,39 +969,33 @@ public class MainActivity extends AppCompatActivity /* implements TagCreateDialo
     }
 
     @UiThread
-    void showToast(String msg) {
+    public void showToast(String msg) {
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
     }
 
     @UiThread
     void LogMessage(String msg) {
-        new AlertDialog.Builder(this).setMessage(msg)
-        .setPositiveButton("Close", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-
-            }
-        }).show();
+        new AlertDialog.Builder(this)
+            .setMessage(msg)
+            .setPositiveButton("Close", null)
+            .show();
     }
+
     @UiThread
     void LogError(String msg, Throwable e) {
-        new AlertDialog.Builder(this).setTitle("Error").setMessage(msg)
-        .setPositiveButton("Close", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-
-            }
-        }).show();
+        new AlertDialog.Builder(this)
+            .setTitle("Error")
+            .setMessage(msg)
+            .setPositiveButton("Close", null)
+            .show();
     }
+
     @UiThread
     void LogError(String msg) {
-        new AlertDialog.Builder(this).setTitle("Error").setMessage(msg)
-        .setPositiveButton("Close", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-
-            }
-        }).show();
+        new AlertDialog.Builder(this)
+            .setTitle("Error")
+            .setMessage(msg)
+            .setPositiveButton("Close", null)
+            .show();
     }
-
 }

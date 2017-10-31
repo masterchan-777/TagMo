@@ -1,185 +1,181 @@
 <?xml version="1.0" encoding="utf-8"?>
-<GridLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
+<android.support.design.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/coordinator"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:paddingBottom="@dimen/activity_vertical_margin"
-    android:paddingLeft="@dimen/activity_horizontal_margin"
-    android:paddingRight="@dimen/activity_horizontal_margin"
-    android:paddingTop="@dimen/activity_vertical_margin"
-    android:columnCount="4"
-    android:rowCount="33"
-    >
+    android:layout_height="match_parent">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Unfixed Key"
-        android:id="@+id/txtUnfixedKey"
-        android:layout_alignParentTop="true"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:layout_row="1"
-        android:layout_column="0" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="NFC"
-        android:id="@+id/txtNFC"
-        android:layout_row="1"
-        android:layout_column="3"
-        android:layout_gravity="right" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Locked Key"
-        android:id="@+id/txtLockedKey"
-        android:layout_alignParentTop="true"
-        android:layout_alignParentRight="true"
-        android:layout_alignParentEnd="true"
-        android:layout_row="3"
-        android:layout_column="0"
-        android:layout_gravity="left" />
-
-    <TextView
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="TAGID"
-        android:id="@+id/txtTagId"
-        android:layout_alignParentTop="true"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentStart="true"
-        android:layout_row="4"
-        android:layout_column="0"
-        android:layout_columnSpan="4" />
-    <Button
-        android:layout_height="wrap_content"
-        android:text="Load Tag"
-        android:id="@+id/btnLoadTag"
-        android:layout_row="5"
-        android:layout_column="0"
-        android:layout_width="148dp" />
+        android:layout_height="match_parent">
 
-    <Button
-        android:layout_height="wrap_content"
-        android:text="Scan Tag"
-        android:id="@+id/btnScanTag"
-        android:layout_row="5"
-        android:layout_column="3"
-        android:layout_width="148dp" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="@dimen/activity_vertical_margin"
+            android:paddingTop="@dimen/activity_vertical_margin">
 
-    <Button
-        android:layout_height="wrap_content"
-        android:text="Write Tag (Auto)"
-        android:id="@+id/btnWriteTagAuto"
-        android:layout_row="6"
-        android:layout_column="0"
-        android:layout_width="148dp"
-        />
+            <FrameLayout
+                android:id="@+id/amiiboInfoView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"/>
 
-    <Button
-        android:layout_height="wrap_content"
-        android:text="Save Tag"
-        android:id="@+id/btnSaveTag"
-        android:layout_row="6"
-        android:layout_column="3"
-        android:layout_width="148dp" />
+            <RelativeLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingLeft="@dimen/activity_horizontal_margin"
+                android:paddingRight="@dimen/activity_horizontal_margin">
 
-    <Button
-        android:layout_height="wrap_content"
-        android:text="Create Tag*"
-        android:id="@+id/btnCreateTag"
-        android:layout_row="7"
-        android:layout_column="0"
-        android:layout_width="148dp"
-        android:visibility="gone" />
+                <Button
+                    android:id="@+id/btnLoadTag"
+                    android:layout_width="@dimen/main_buttons_width"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentLeft="true"
+                    android:text="Load Tag"/>
 
-    <Button
-        android:layout_height="wrap_content"
-        android:text="Write Tag (Raw)"
-        android:id="@+id/btnWriteTagRaw"
-        android:layout_row="8"
-        android:layout_column="0"
-        android:layout_gravity="right"
-        android:layout_width="148dp" />
+                <Button
+                    android:id="@+id/btnScanTag"
+                    android:layout_width="@dimen/main_buttons_width"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentRight="true"
+                    android:text="Scan Tag"
+                    android:enabled="false"/>
 
-    <Button
-        android:layout_height="wrap_content"
-        android:text="Restore Tag"
-        android:id="@+id/btnRestoreTag"
-        android:layout_row="8"
-        android:layout_column="3"
-        android:layout_gravity="right"
-        android:layout_width="148dp" />
+                <Button
+                    android:id="@+id/btnSaveTag"
+                    android:layout_width="@dimen/main_buttons_width"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentLeft="true"
+                    android:layout_alignParentStart="true"
+                    android:layout_below="@+id/btnLoadTag"
+                    android:text="Save Tag"
+                    android:enabled="false"/>
 
-    <CheckBox
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Auto save scanned tags"
-        android:id="@+id/cbAutoSaveOnScan"
-        android:layout_row="13"
-        android:layout_column="0"
-        android:layout_columnSpan="4" />
+                <Button
+                    android:id="@+id/btnWriteTagAuto"
+                    android:layout_width="@dimen/main_buttons_width"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_alignParentRight="true"
+                    android:layout_below="@+id/btnScanTag"
+                    android:text="Write Tag"
+                    android:enabled="false"/>
 
-    <CheckBox
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Allow restore to different tag"
-        android:id="@+id/cbNoIDValidate"
-        android:layout_row="14"
-        android:layout_column="0"
-        android:layout_columnSpan="4" />
+                <Button
+                    android:id="@+id/btnViewHex"
+                    android:layout_width="@dimen/main_buttons_width"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentLeft="true"
+                    android:layout_below="@id/btnSaveTag"
+                    android:text="View Hex"
+                    android:enabled="false"/>
 
-    <Button
-        android:layout_height="wrap_content"
-        android:text="Edit Mii Data"
-        android:id="@+id/btnEditDataMii"
-        android:layout_row="15"
-        android:layout_column="0"
-        android:layout_gravity="right"
-        android:layout_width="148dp"
-        android:visibility="gone" />
+                <Button
+                    android:id="@+id/btnRestoreTag"
+                    android:layout_width="@dimen/main_buttons_width"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_alignParentRight="true"
+                    android:layout_below="@+id/btnWriteTagAuto"
+                    android:text="Restore Tag"
+                    android:enabled="false"/>
 
-    <Button
-        android:id="@+id/btnEditDataSSB"
-        android:layout_width="148dp"
-        android:layout_height="wrap_content"
-        android:layout_column="3"
-        android:layout_gravity="right"
-        android:layout_row="15"
-        android:text="Edit SSB Data"
-        android:visibility="invisible" />
+                <Button
+                    android:id="@+id/btnShowQRCode"
+                    android:layout_width="@dimen/main_buttons_width"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentLeft="true"
+                    android:layout_below="@id/btnViewHex"
+                    android:text="Show QR Code"
+                    android:enabled="false"/>
 
-    <Button
-        android:id="@+id/btnEditDataTP"
-        android:layout_width="148dp"
-        android:layout_height="wrap_content"
-        android:layout_column="3"
-        android:layout_gravity="right"
-        android:layout_row="15"
-        android:text="@string/edit_tp_data"
-        android:visibility="invisible" />
+                <Button
+                    android:id="@+id/btnScanQRCode"
+                    android:layout_width="@dimen/main_buttons_width"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentRight="true"
+                    android:layout_below="@+id/btnRestoreTag"
+                    android:text="Scan QR Code"/>
 
-    <Button
-        android:layout_height="wrap_content"
-        android:text="Fix Signatures"
-        android:id="@+id/btnFixSig"
-        android:layout_row="17"
-        android:layout_column="0"
-        android:layout_gravity="right"
-        android:layout_width="148dp"
-        android:visibility="gone" />
+                <Button
+                    android:id="@+id/btnCreateTag"
+                    android:layout_width="@dimen/main_buttons_width"
+                    android:layout_height="wrap_content"
+                    android:text="Create Tag*"
+                    android:visibility="gone"
+                    android:enabled="false"/>
 
-    <Button
-        android:layout_width="148dp"
-        android:layout_height="wrap_content"
-        android:text="View Hex"
-        android:id="@+id/btnViewHex"
-        android:layout_gravity="right"
-        android:layout_row="31"
-        android:layout_column="3" />
+                <Button
+                    android:id="@+id/btnWriteTagRaw"
+                    android:layout_width="@dimen/main_buttons_width"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentLeft="true"
+                    android:layout_below="@+id/btnWriteTagAuto"
+                    android:text="Write Tag (Raw)"
+                    android:visibility="gone"
+                    android:enabled="false"/>
 
+                <CheckBox
+                    android:id="@+id/cbAutoSaveOnScan"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_below="@+id/btnScanQRCode"
+                    android:text="Auto save scanned tags"/>
 
-</GridLayout>
+                <CheckBox
+                    android:id="@+id/cbNoIDValidate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_below="@+id/cbAutoSaveOnScan"
+                    android:layout_toRightOf="@+id/btnCreateTag"
+                    android:text="Allow restore to different tag"/>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentRight="true"
+                    android:layout_below="@id/cbNoIDValidate">
+
+                    <Button
+                        android:id="@+id/btnEditDataMii"
+                        android:layout_width="@dimen/main_buttons_width"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="right"
+                        android:text="@string/edit_mii_data"
+                        android:visibility="gone"
+                        android:enabled="false"/>
+
+                    <Button
+                        android:id="@+id/btnEditDataSSB"
+                        android:layout_width="@dimen/main_buttons_width"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="right"
+                        android:text="@string/edit_ssb_data"
+                        android:visibility="gone"
+                        android:enabled="false"/>
+
+                    <Button
+                        android:id="@+id/btnEditDataTP"
+                        android:layout_width="@dimen/main_buttons_width"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="right"
+                        android:text="@string/edit_tp_data"
+                        android:visibility="gone"
+                        android:enabled="false"/>
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btnFixSig"
+                    android:layout_width="@dimen/main_buttons_width"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentLeft="true"
+                    android:layout_below="@id/cbNoIDValidate"
+                    android:text="Fix Signatures"
+                    android:visibility="gone"/>
+
+            </RelativeLayout>
+        </LinearLayout>
+    </ScrollView>
+</android.support.design.widget.CoordinatorLayout>

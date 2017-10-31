@@ -4,11 +4,15 @@ import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.nfc.tech.MifareUltralight;
+import android.os.Build;
+import android.provider.Settings;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
@@ -23,6 +27,7 @@ import org.androidannotations.annotations.Background;
 import org.androidannotations.annotations.EActivity;
 import org.androidannotations.annotations.UiThread;
 import org.androidannotations.annotations.ViewById;
+import org.androidannotations.annotations.sharedpreferences.Pref;
 
 @EActivity(R.layout.activity_nfc)
 public class NfcActivity extends AppCompatActivity {
@@ -47,6 +52,9 @@ public class NfcActivity extends AppCompatActivity {
     ImageView imgNfcBar;
     @ViewById(R.id.imgNfcCircle)
     ImageView imgNfcCircle;
+
+    @Pref
+    Preferences_ prefs;
 
     NfcAdapter nfcAdapter;
     KeyManager keyManager;
@@ -83,7 +91,6 @@ public class NfcActivity extends AppCompatActivity {
                 break;
             case ACTION_WRITE_TAG_FULL:
                 setTitle("Write to Tag (Auto)");
-                showToast("Done");
                 break;
             case ACTION_WRITE_TAG_DATA:
                 setTitle("Update Data on Tag");
@@ -158,7 +165,7 @@ public class NfcActivity extends AppCompatActivity {
                         data = commandIntent.getByteArrayExtra(EXTRA_TAG_DATA);
                         if (data == null)
                             throw new Exception("No data to write");
-                        TagWriter.writeToTagRaw(mifare, data);
+                        TagWriter.writeToTagRaw(mifare, data, prefs.enableTagTypeValidation().get());
                         resultCode = Activity.RESULT_OK;
                         showToast("Done");
                         break;
@@ -166,7 +173,7 @@ public class NfcActivity extends AppCompatActivity {
                         data = commandIntent.getByteArrayExtra(EXTRA_TAG_DATA);
                         if (data == null)
                             throw new Exception("No data to write");
-                        TagWriter.writeToTagAuto(mifare, data, this.keyManager);
+                        TagWriter.writeToTagAuto(mifare, data, this.keyManager, prefs.enableTagTypeValidation().get(), prefs.enablePowerTagSupport().get());
                         resultCode = Activity.RESULT_OK;
                         showToast("Done");
                         break;
@@ -175,7 +182,7 @@ public class NfcActivity extends AppCompatActivity {
                         boolean ignoreUid = commandIntent.getBooleanExtra(EXTRA_IGNORE_TAG_ID, false);
                         if (data == null)
                             throw new Exception("No data to write");
-                        TagWriter.restoreTag(mifare, data, ignoreUid, this.keyManager);
+                        TagWriter.restoreTag(mifare, data, ignoreUid, this.keyManager, prefs.enableTagTypeValidation().get());
                         resultCode = Activity.RESULT_OK;
                         showToast("Done");
                         break;
@@ -223,6 +230,26 @@ public class NfcActivity extends AppCompatActivity {
         {
             showError("NFC support not detected.");
             return;
+        }
+
+        if (!nfcAdapter.isEnabled()) {
+            showError("NFC Disabled.");
+            new AlertDialog.Builder(this)
+                .setMessage("NFC adapter is currently disabled. Enable NFC?")
+                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                            Intent intent = new Intent(Settings.ACTION_NFC_SETTINGS);
+                            startActivity(intent);
+                        } else {
+                            Intent intent = new Intent(Settings.ACTION_WIRELESS_SETTINGS);
+                            startActivity(intent);
+                        }
+                    }
+                })
+                .setNegativeButton("No", null)
+                .show();
         }
 
         //monitor nfc status
